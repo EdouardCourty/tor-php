@@ -1,0 +1,38 @@
+name: PHP CI
+
+on:
+  push:
+    branches: [ 'main' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  validate:
+    name: Validate codebase
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.4
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - name: Audit dependencies
+        run: composer audit --no-dev
+
+      - name: Install dependencies
+        run: composer install --no-progress
+
+      - name: Run PHP CS Fixer
+        run: PHP_CS_FIXER_IGNORE_ENV=1 php vendor/bin/php-cs-fixer check --config=.php-cs-fixer.php
+
+      - name: Run PHPStan
+        run: php vendor/bin/phpstan --memory-limit=-1
+
+      - name: Run PHPUnit
+        run: php vendor/bin/phpunit tests
