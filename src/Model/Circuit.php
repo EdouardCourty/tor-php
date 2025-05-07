@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace TorPHP\Model;
 
+/**
+ * Represents a Tor circuit.
+ *
+ * @author Edouard Courty
+ */
 class Circuit
 {
     /**

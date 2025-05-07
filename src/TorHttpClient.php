@@ -121,6 +121,9 @@ class TorHttpClient implements HttpClientInterface
         $torControlClient->close();
     }
 
+    /**
+     * Helper method to build the HTTP client with the current options.
+     */
     private function buildHttpClient(): void
     {
         $this->httpClient = $this->baseHttpClient->withOptions($this->clientOptions);

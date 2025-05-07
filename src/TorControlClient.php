@@ -39,6 +39,10 @@ class TorControlClient
         $this->authenticate();
     }
 
+    /**
+     * Helper method to assert the response from Tor ControlPort.
+     * Returns the response string if successful.
+     */
     private function assertSuccessResponse(): string
     {
         $response = $this->socketClient->readLine();
@@ -55,7 +59,7 @@ class TorControlClient
     }
 
     /**
-     * Authenticates against the Tor ControlPort using password or cookie.
+     * Helper method to authenticate against the Tor ControlPort using password or cookie.
      */
     private function authenticate(): void
     {
@@ -136,6 +140,8 @@ class TorControlClient
     }
 
     /**
+     * Fetches the current Tor circuits the node has.
+     *
      * @return Circuit[]
      */
     public function getCircuits(): array

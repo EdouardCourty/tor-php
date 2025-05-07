@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace TorPHP\Model;
 
+/**
+ * Represents a port mapping for a Tor hidden service.
+ *
+ * @author Edouard Courty
+ */
 class PortMapping
 {
     public function __construct(

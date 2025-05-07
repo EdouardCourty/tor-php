@@ -47,6 +47,9 @@ class TorSocketClient
         $this->socket = $socket;
     }
 
+    /**
+     * Helper method to write to the socket
+     */
     public function write(string $data): void
     {
         $this->ensureConnected();
@@ -57,6 +60,9 @@ class TorSocketClient
         }
     }
 
+    /**
+     * Reads one line from the socket
+     */
     public function readLine(): ?string
     {
         $this->ensureConnected();
@@ -70,6 +76,8 @@ class TorSocketClient
     }
 
     /**
+     * Reads a block of data from the socket until the specified string is found.
+     *
      * @return string[]
      */
     public function readBlock(string $until): array
@@ -101,6 +109,9 @@ class TorSocketClient
         return $buffer;
     }
 
+    /**
+     * Closes the socket connection.
+     */
     public function close(): void
     {
         if (\is_resource($this->socket) === true) {
@@ -110,6 +121,9 @@ class TorSocketClient
         $this->socket = false;
     }
 
+    /**
+     * Helper method to check if the socket is instantiated
+     */
     private function ensureConnected(): void
     {
         if (\is_resource($this->socket) === false) {
