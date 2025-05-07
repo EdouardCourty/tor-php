@@ -1,6 +1,6 @@
 {
     "name": "ecourty/tor-php",
-    "description": "A Tor HTTP client for PHP",
+    "description": "A Symfony-based HTTP client and ControlPort client for interacting with the Tor network in PHP.",
     "type": "library",
     "keywords": [
         "Tor",

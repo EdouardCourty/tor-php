@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TorPHP;
 
 use TorPHP\Exception\SocketException;
+use TorPHP\Helper\PrivateKeyHelper;
 use TorPHP\Model\Circuit;
 use TorPHP\Model\OnionService;
 use TorPHP\Model\PortMapping;
@@ -29,11 +30,12 @@ class TorControlClient
         string $host = self::DEFAULT_HOST,
         int $port = self::DEFAULT_PORT,
         float $timeout = self::DEFAULT_TIMEOUT,
-        private readonly ?string $password = null,
+        #[\SensitiveParameter] private readonly ?string $password = null,
+        #[\SensitiveParameter] private readonly ?string $authenticationCookie = null,
     ) {
         $this->socketClient = new TorSocketClient(host: $host, port: $port, timeout: $timeout);
-
         $this->socketClient->connect();
+
         $this->authenticate();
     }
 
@@ -53,13 +55,33 @@ class TorControlClient
     }
 
     /**
-     * Authenticates against the Tor ControlPort.
+     * Authenticates against the Tor ControlPort using password or cookie.
      */
     private function authenticate(): void
     {
-        $cmd = $this->password !== null
-            ? \sprintf("AUTHENTICATE \"%s\"\r\n", addslashes($this->password))
-            : "AUTHENTICATE\r\n";
+        if ($this->password !== null) {
+            $cmd = \sprintf("AUTHENTICATE \"%s\"\r\n", addslashes($this->password));
+        } elseif ($this->authenticationCookie !== null) {
+            // Check if cookie file is available and readable
+            if (file_exists($this->authenticationCookie) === false || is_readable($this->authenticationCookie) === false) {
+                throw new SocketException(
+                    message: \sprintf('Authentication cookie file "%s" not found or not readable', $this->authenticationCookie),
+                );
+            }
+
+            // Get the cookie file content
+            $cookieContent = file_get_contents($this->authenticationCookie);
+            if ($cookieContent === false) {
+                throw new SocketException(
+                    message: \sprintf('Failed to read authentication cookie file "%s"', $this->authenticationCookie),
+                );
+            }
+
+            $cookieHex = bin2hex($cookieContent);
+            $cmd = \sprintf("AUTHENTICATE %s\r\n", $cookieHex);
+        } else {
+            $cmd = "AUTHENTICATE\r\n";
+        }
 
         $this->socketClient->write($cmd);
         $this->assertSuccessResponse();
@@ -227,20 +249,20 @@ class TorControlClient
     /**
      * Adds (or updates) an onion service.
      *
-     * @param array<PortMapping|string> $portMappings PortMapping or this format ['<remotePort>,<host>:<localPort>', ...]
-     * @param string|null               $keyType      Either 'NEW:ED25519-V3' or a private-key blob (default to NEW:ED25519-V3)
+     * @param array<PortMapping|string> $portMappings Array of PortMapping or this string format ['<remotePort>,<host>:<localPort>', ...]
+     * @param string|null               $privateKey   Either null or a base64-encoded private-key (can be prefixed with "ED25519-V3:")
      */
-    public function addOnionService(array $portMappings, ?string $keyType = null): OnionService
+    public function addOnionService(array $portMappings, ?string $privateKey = null): OnionService
     {
-        if ($keyType === null) {
-            $keyType = 'NEW:ED25519-V3'; // Lets the node create a private key for us
-        }
+        $privateKeyArgument = $privateKey === null
+            ? PrivateKeyHelper::NO_PRIVATE_KEY
+            : PrivateKeyHelper::parsePrivateKey($privateKey);
 
-        $cmd = 'ADD_ONION ' . $keyType;
+        $cmd = 'ADD_ONION ' . $privateKeyArgument . ' Flags=Detach ';
         foreach ($portMappings as $mapping) {
             $mappingData = $mapping instanceof PortMapping
-                ? $mapping->toPortString()
-                : $mapping;
+                ? $mapping->toString()
+                : PortMapping::fromString($mapping)->toString(); // Checks if the format is correct
 
             $cmd .= ' Port=' . $mappingData;
         }
@@ -250,7 +272,7 @@ class TorControlClient
         $lines = $this->socketClient->readBlock(until: '250 OK');
 
         $serviceId = '';
-        $privateKey = '';
+        $returnedPrivateKey = '';
 
         foreach ($lines as $line) {
             // Strip any leading "250-" or "250 " prefix
@@ -258,7 +280,7 @@ class TorControlClient
             if (str_starts_with($trimmed, 'ServiceID=')) {
                 [, $serviceId] = explode('=', $trimmed, 2);
             } elseif (str_starts_with($trimmed, 'PrivateKey=')) {
-                [, $privateKey] = explode('=', $trimmed, 2);
+                [, $returnedPrivateKey] = explode('=', $trimmed, 2);
             }
         }
 
@@ -266,7 +288,11 @@ class TorControlClient
             throw new SocketException(message: 'Failed to parse ADD_ONION response: missing ServiceID');
         }
 
-        return new OnionService(id: $serviceId, privateKey: $privateKey);
+        return new OnionService(
+            id: $serviceId,
+            url: \sprintf('http://%s.onion', $serviceId),
+            privateKey: $returnedPrivateKey,
+        );
     }
 
     /**

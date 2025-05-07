@@ -27,11 +27,17 @@ class TorHttpClient implements HttpClientInterface
     /** @var array<string, mixed> */
     private array $clientOptions;
 
+    /**
+     * If both controlPassword and controlAuthenticationCookie are set, the control password will be used.
+     *
+     * @param HttpClientInterface|null $httpClient Re-use an existing HttpClient instance
+     */
     public function __construct(
         private readonly string $host = self::TOR_DEFAULT_HOST,
         private readonly int $port = self::TOR_DEFAULT_PROXY_PORT,
         private readonly int $controlPort = self::TOR_DEFAULT_CONTROL_PORT,
-        private readonly ?string $controlPassword = null,
+        #[\SensitiveParameter] private readonly ?string $controlPassword = null,
+        #[\SensitiveParameter] private readonly ?string $controlAuthenticationCookie = null,
         ?HttpClientInterface $httpClient = null,
     ) {
         $this->baseHttpClient = $httpClient ?? HttpClient::create();
@@ -80,6 +86,7 @@ class TorHttpClient implements HttpClientInterface
             $this->port,
             $this->controlPort,
             $this->controlPassword,
+            $this->controlAuthenticationCookie,
             $this->baseHttpClient->withOptions($options),
         );
     }
@@ -94,6 +101,7 @@ class TorHttpClient implements HttpClientInterface
             port: $this->controlPort,
             timeout: 15,
             password: $this->controlPassword,
+            authenticationCookie: $this->controlAuthenticationCookie,
         );
 
         $torControlClient->setEvents(['CIRC']);

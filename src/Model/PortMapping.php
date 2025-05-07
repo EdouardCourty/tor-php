@@ -13,8 +13,23 @@ class PortMapping
     ) {
     }
 
-    public function toPortString(): string
+    public function toString(): string
     {
         return \sprintf('%d,%s:%d', $this->remotePort, $this->host, $this->localPort);
+    }
+
+    public static function fromString(string $payload): self
+    {
+        if (preg_match('/^(\d+),([\w\.\-]+):(\d+)$/', mb_trim($payload), $matches) !== 1) {
+            throw new \InvalidArgumentException(\sprintf('Invalid port mapping format: "%s"', $payload));
+        }
+
+        [, $remotePort, $host, $localPort] = $matches;
+
+        return new self(
+            host: $host,
+            localPort: (int) $localPort,
+            remotePort: (int) $remotePort,
+        );
     }
 }
