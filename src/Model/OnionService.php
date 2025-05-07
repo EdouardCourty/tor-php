@@ -7,8 +7,8 @@ namespace TorPHP\Model;
 class OnionService
 {
     public function __construct(
+        public string $id,
         public string $privateKey,
-        public string $serviceId,
     ) {
     }
 }

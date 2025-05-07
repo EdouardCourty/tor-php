@@ -8,45 +8,48 @@ use TorPHP\Exception\SocketException;
 use TorPHP\Model\Circuit;
 use TorPHP\Model\OnionService;
 use TorPHP\Model\PortMapping;
+use TorPHP\Transport\TorSocketClient;
 
 /**
  * A client for interacting with Tor via the ControlPort.
+ *
+ * @author Edouard Courty
  */
 class TorControlClient
 {
+    private const string SUCCESS_RESPONSE_PREFIX = '250';
+
     private const string DEFAULT_HOST = '127.0.0.1';
     private const int DEFAULT_PORT = 9051;
     private const float DEFAULT_TIMEOUT = 30.0;
 
-    /** @var resource|false */
-    private $socket = false;
+    private readonly TorSocketClient $socketClient;
 
     public function __construct(
-        private readonly string $host = self::DEFAULT_HOST,
-        private readonly int $port = self::DEFAULT_PORT,
+        string $host = self::DEFAULT_HOST,
+        int $port = self::DEFAULT_PORT,
+        float $timeout = self::DEFAULT_TIMEOUT,
         private readonly ?string $password = null,
-        private readonly float $timeout = self::DEFAULT_TIMEOUT,
     ) {
+        $this->socketClient = new TorSocketClient(host: $host, port: $port, timeout: $timeout);
+
+        $this->socketClient->connect();
+        $this->authenticate();
     }
 
-    /**
-     * Establishes connection and authenticates.
-     */
-    public function connect(): void
+    private function assertSuccessResponse(): string
     {
-        $this->socket = @fsockopen($this->host, $this->port, $errorCode, $errorMessage, $this->timeout);
+        $response = $this->socketClient->readLine();
 
-        if (\is_resource($this->socket) === false) {
-            throw new SocketException(\sprintf(
-                'Unable to connect to Tor ControlPort at %s:%d — [%d] %s',
-                $this->host,
-                $this->port,
-                $errorCode,
-                $errorMessage,
-            ));
+        if ($response === null || str_starts_with($response, self::SUCCESS_RESPONSE_PREFIX) === false) {
+            $message = \sprintf(
+                'Unexpected response from Tor ControlPort: %s',
+                $response ?? 'No response',
+            );
+            throw new SocketException(message: $message);
         }
 
-        $this->authenticate();
+        return $response;
     }
 
     /**
@@ -58,8 +61,8 @@ class TorControlClient
             ? \sprintf("AUTHENTICATE \"%s\"\r\n", addslashes($this->password))
             : "AUTHENTICATE\r\n";
 
-        $this->write($cmd);
-        $this->expectResponse('250');
+        $this->socketClient->write($cmd);
+        $this->assertSuccessResponse();
     }
 
     /**
@@ -71,8 +74,8 @@ class TorControlClient
     {
         $list = implode(' ', $events);
 
-        $this->write(\sprintf("SETEVENTS %s\r\n", $list));
-        $this->expectResponse('250');
+        $this->socketClient->write(\sprintf("SETEVENTS %s\r\n", $list));
+        $this->assertSuccessResponse();
     }
 
     /**
@@ -80,8 +83,8 @@ class TorControlClient
      */
     public function signalNewnym(): void
     {
-        $this->write("SIGNAL NEWNYM\r\n");
-        $this->expectResponse('250');
+        $this->socketClient->write("SIGNAL NEWNYM\r\n");
+        $this->assertSuccessResponse();
     }
 
     /**
@@ -92,13 +95,14 @@ class TorControlClient
         $start = time();
 
         while (time() - $start < $timeoutSeconds) {
-            $line = $this->readLine();
+            $line = $this->socketClient->readLine();
+
             if ($line !== null && preg_match('/^650 CIRC .* BUILT/', mb_trim($line))) {
                 return;
             }
         }
 
-        throw new SocketException('Timed out waiting for new circuit build');
+        throw new SocketException(message: 'Timed out waiting for new circuit build');
     }
 
     /**
@@ -106,77 +110,7 @@ class TorControlClient
      */
     public function close(): void
     {
-        if (\is_resource($this->socket) === true) {
-            $this->write("QUIT\r\n");
-
-            fclose($this->socket); // @phpstan-ignore-line
-            $this->socket = false;
-        }
-    }
-
-    /**
-     * Ensures the socket is open.
-     */
-    private function ensureConnected(): void
-    {
-        if (\is_resource($this->socket) === false) {
-            throw new SocketException('Control connection is not open');
-        }
-    }
-
-    private function write(string $command): void
-    {
-        $this->ensureConnected();
-        fwrite($this->socket, $command); // @phpstan-ignore-line
-    }
-
-    private function readLine(): ?string
-    {
-        $this->ensureConnected();
-        $line = fgets($this->socket); // @phpstan-ignore-line
-
-        return $line === false ? null : $line;
-    }
-
-    /**
-     * Expects a response prefix, returns the block and throws on mismatch.
-     */
-    private function expectResponse(string $prefix): string
-    {
-        $line = $this->readLine();
-
-        if ($line === null || str_starts_with($line, $prefix) === false) {
-            throw new SocketException(\sprintf(
-                'Unexpected response from Tor ControlPort: %s',
-                $line ?? 'No response',
-            ));
-        }
-
-        return $line;
-    }
-
-    /**
-     * Reads until the given terminator line appears, returning the accumulated data.
-     */
-    private function readBlock(string $until): array
-    {
-        $buffer = [];
-
-        while (($line = $this->readLine()) !== null) {
-            if (mb_trim($line) === $until) {
-                break;
-            }
-            $buffer[] = mb_trim($line);
-        }
-
-        if (count($buffer) === 0) {
-            throw new SocketException(\sprintf(
-                'No data received before %s',
-                $until,
-            ));
-        }
-
-        return $buffer;
+        $this->socketClient->close();
     }
 
     /**
@@ -184,8 +118,8 @@ class TorControlClient
      */
     public function getCircuits(): array
     {
-        $this->write("GETINFO circuit-status\r\n");
-        $lines = $this->readBlock(until: '250 OK');
+        $this->socketClient->write("GETINFO circuit-status\r\n");
+        $lines = $this->socketClient->readBlock(until: '250 OK');
 
         $circuits = [];
 
@@ -224,7 +158,12 @@ class TorControlClient
                 }
             }
 
-            $circuits[] = new Circuit((int) $id, $status, $nodes, $meta);
+            $circuits[] = new Circuit(
+                id: (int) $id,
+                status: $status,
+                nodes: $nodes,
+                metadata: $meta,
+            );
         }
 
         return $circuits;
@@ -235,8 +174,8 @@ class TorControlClient
      */
     public function getConfigValue(string $key): string
     {
-        $this->write(\sprintf("GETCONF %s\r\n", $key));
-        $raw = $this->expectResponse('250');
+        $this->socketClient->write(\sprintf("GETCONF %s\r\n", $key));
+        $raw = $this->assertSuccessResponse();
 
         // Remove the "250" prefix from the response
         $cleaned = (string) preg_replace('/^250\s+/', '', $raw);
@@ -257,19 +196,19 @@ class TorControlClient
      */
     public function setConfigValue(string $key, string $value): void
     {
-        $this->write(\sprintf("SETCONF %s=%s\r\n", $key, $value));
-        $this->expectResponse('250');
+        $this->socketClient->write(\sprintf("SETCONF %s=%s\r\n", $key, $value));
+        $this->assertSuccessResponse();
     }
 
     /**
      * Lists configured onion services.
+     *
+     * @return string[] List of onion service IDs
      */
-    public function listOnions(): array
+    public function listOnionServices(): array
     {
-        $this->ensureConnected();
-
-        $this->write("GETINFO onions/current\r\n");
-        $lines = $this->readBlock(until: '250 OK');
+        $this->socketClient->write("GETINFO onions/current\r\n");
+        $lines = $this->socketClient->readBlock(until: '250 OK');
 
         foreach ($lines as $line) {
             // Strip any "250-" or "250 " prefix
@@ -277,6 +216,7 @@ class TorControlClient
 
             if (str_starts_with($trimmed, 'onions/current=')) {
                 [, $list] = explode('=', $trimmed, 2);
+
                 return $list === '' ? [] : explode(',', $list);
             }
         }
@@ -288,12 +228,10 @@ class TorControlClient
      * Adds (or updates) an onion service.
      *
      * @param array<PortMapping|string> $portMappings PortMapping or this format ['<remotePort>,<host>:<localPort>', ...]
-     * @param string|null               $keyType Either 'NEW:ED25519-V3' or a private-key blob (default to NEW:ED25519-V3)
+     * @param string|null               $keyType      Either 'NEW:ED25519-V3' or a private-key blob (default to NEW:ED25519-V3)
      */
-    public function addOnion(array $portMappings, ?string $keyType = null): OnionService
+    public function addOnionService(array $portMappings, ?string $keyType = null): OnionService
     {
-        $this->ensureConnected();
-
         if ($keyType === null) {
             $keyType = 'NEW:ED25519-V3'; // Lets the node create a private key for us
         }
@@ -308,8 +246,8 @@ class TorControlClient
         }
         $cmd .= "\r\n";
 
-        $this->write($cmd);
-        $lines = $this->readBlock(until: '250 OK');
+        $this->socketClient->write($cmd);
+        $lines = $this->socketClient->readBlock(until: '250 OK');
 
         $serviceId = '';
         $privateKey = '';
@@ -325,20 +263,18 @@ class TorControlClient
         }
 
         if ($serviceId === '') {
-            throw new SocketException('Failed to parse ADD_ONION response: missing ServiceID');
+            throw new SocketException(message: 'Failed to parse ADD_ONION response: missing ServiceID');
         }
 
-        return new OnionService(privateKey: $privateKey, serviceId: $serviceId);
+        return new OnionService(id: $serviceId, privateKey: $privateKey);
     }
 
     /**
      * Removes an existing onion service.
      */
-    public function delOnion(string $serviceId): void
+    public function deleteOnionService(string $serviceId): void
     {
-        $this->ensureConnected();
-
-        $this->write(sprintf('DEL_ONION %s\r\n', $serviceId));
-        $this->expectResponse('250');
+        $this->socketClient->write(\sprintf('DEL_ONION %s\r\n', $serviceId));
+        $this->assertSuccessResponse();
     }
 }

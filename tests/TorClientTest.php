@@ -6,10 +6,10 @@ namespace TorPHP\Tests;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpClient\HttpClient;
-use TorPHP\TorClient;
+use TorPHP\TorHttpClient;
 
 /**
- * @coversDefaultClass \TorPHP\TorClient
+ * @coversDefaultClass \TorPHP\TorHttpClient
  */
 class TorClientTest extends TestCase
 {
@@ -27,7 +27,7 @@ class TorClientTest extends TestCase
         $this->assertArrayHasKey('IsTor', $nonTorResponse, 'Non-Tor response should contain IsTor key');
         $this->assertFalse($nonTorResponse['IsTor'], 'Non-Tor response should not be from Tor network');
 
-        $torClient = new TorClient(httpClient: $nonTorHttpClient);
+        $torClient = new TorHttpClient(httpClient: $nonTorHttpClient);
         $torIp = $torClient->request('GET', '/api/ip')->toArray();
 
         $this->assertArrayHasKey('IP', $torIp, 'Tor response should contain IP key');
@@ -48,7 +48,7 @@ class TorClientTest extends TestCase
         $this->assertArrayHasKey('IP', $nonTorResponse, 'Non-Tor response should contain IP key');
         $nonTorIp = $nonTorResponse['IP'];
 
-        $topClient = new TorClient(httpClient: $nonTorHttpClient);
+        $topClient = new TorHttpClient(httpClient: $nonTorHttpClient);
         $noProxyResponse = $topClient->request('GET', '/api/ip', [
             'no_proxy' => 'torproject.org',
         ])->toArray();
@@ -66,7 +66,7 @@ class TorClientTest extends TestCase
     public function testNewIdentity(): void
     {
         $httpClient = HttpClient::createForBaseUri('https://check.torproject.org');
-        $torClient = new TorClient(controlPassword: 'password', httpClient: $httpClient);
+        $torClient = new TorHttpClient(controlPassword: 'Password', httpClient: $httpClient);
 
         $torIp = $torClient->request('GET', '/api/ip')->toArray()['IP'];
 
@@ -95,7 +95,7 @@ class TorClientTest extends TestCase
             ],
         );
 
-        $torClient = new TorClient(httpClient: $httpClient);
+        $torClient = new TorHttpClient(httpClient: $httpClient);
         $clientOptions = $this->extractClientOptions($torClient);
 
         $this->assertSame($baseTimeout, $clientOptions['timeout']);
@@ -127,9 +127,9 @@ class TorClientTest extends TestCase
     /**
      * @return array<string, mixed>
      */
-    private function extractClientOptions(TorClient $torClient): array
+    private function extractClientOptions(TorHttpClient $torClient): array
     {
-        $httpClient = new \ReflectionProperty(TorClient::class, 'httpClient');
+        $httpClient = new \ReflectionProperty(TorHttpClient::class, 'httpClient');
         $client = $httpClient->getValue($torClient);
 
         $clientReflection = new \ReflectionProperty($client, 'defaultOptions');

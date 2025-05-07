@@ -14,7 +14,7 @@ use Symfony\Contracts\HttpClient\ResponseStreamInterface;
  *
  * @author Edouard Courty
  */
-class TorClient implements HttpClientInterface
+class TorHttpClient implements HttpClientInterface
 {
     private const string TOR_DEFAULT_HOST = '127.0.0.1';
 
@@ -44,19 +44,29 @@ class TorClient implements HttpClientInterface
 
     /**
      * @param array<string, mixed> $options
+     *
+     * @see HttpClientInterface::request()
      */
     public function request(string $method, string $url, array $options = []): ResponseInterface
     {
         return $this->httpClient->request($method, $url, $options);
     }
 
+    /**
+     * @see HttpClientInterface::stream()
+     */
     public function stream(iterable|ResponseInterface $responses, ?float $timeout = null): ResponseStreamInterface
     {
         return $this->httpClient->stream($responses, $timeout);
     }
 
     /**
+     * Create a new TorHttpClient instance with the new options.
+     * This method keeps the current TorHttpClient options and merges them with the new ones.
+     *
      * @param array<string, mixed> $options
+     *
+     * @see HttpClientInterface::withOptions()
      */
     public function withOptions(array $options): static
     {
@@ -82,11 +92,10 @@ class TorClient implements HttpClientInterface
         $torControlClient = new TorControlClient(
             host: $this->host,
             port: $this->controlPort,
-            password: $this->controlPassword,
             timeout: 15,
+            password: $this->controlPassword,
         );
 
-        $torControlClient->connect();
         $torControlClient->setEvents(['CIRC']);
         $torControlClient->signalNewnym();
 

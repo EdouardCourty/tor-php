@@ -7,14 +7,14 @@ namespace TorPHP\Model;
 class Circuit
 {
     /**
-     * @param array<string>         $paths
-     * @param array<string, string> $meta
+     * @param array<string>         $nodes
+     * @param array<string, string> $metadata
      */
     public function __construct(
         public int $id,
         public string $status,
-        public array $paths,
-        public array $meta,
+        public array $nodes,
+        public array $metadata,
     ) {
     }
 }

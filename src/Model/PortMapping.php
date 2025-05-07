@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TorPHP\Model;
 
 class PortMapping
@@ -13,6 +15,6 @@ class PortMapping
 
     public function toPortString(): string
     {
-        return sprintf('%d,%s:%d', $this->remotePort, $this->host, $this->localPort);
+        return \sprintf('%d,%s:%d', $this->remotePort, $this->host, $this->localPort);
     }
 }

@@ -1,53 +1,93 @@
-# IPFS-PHP
+# TOR-PHP
 
-[![PHP CI](https://github.com/EdouardCourty/ipfs-php/actions/workflows/php_ci.yml/badge.svg)](https://github.com/EdouardCourty/ipfs-php/actions/workflows/php_ci.yml)
+[![PHP CI](https://github.com/EdouardCourty/tor-php/actions/workflows/php_ci.yml/badge.svg)](https://github.com/EdouardCourty/tor-php/actions/workflows/php_ci.yml)
 
-IPFS-PHP provides a simple way to interact with an IPFS Node using PHP.  
+Tor-PHP provides a tor-proxied HTTP client for PHP, built on top of Symfony's HttpClient component. <br />
+It allows you to make HTTP requests through the Tor network, enabling anonymous browsing and web scraping. <br />
+
+It also allows you to interact with your Tor node using the Tor Control Protocol, enabling you to manage your Tor circuits and perform other operations.
+
 The changelog for this project can be found [here](./CHANGELOG.md).
 
 ## Installation
 
-```shell
-composer require ecourty/ipfs-php
-```
+1. Install Tor on your system : [official website page](https://community.torproject.org/onion-services/setup/install/) <br />
+    _TLDR_: <br />
+    - On Ubuntu/Debian: `sudo apt-get install tor` <br />
+    - On MacOS: `brew install tor` <br />
 
-## Usage
+_If you want to use this library to its fullest, make sure the Tor ControlPort is enabled._
 
-The following example shows how to add a file to IPFS and retrieve its content later.  
+2. Install the library
+    ```shell
+    composer require ecourty/tor-php
+    ```
 
-```php
-<?php
+## Usage example
 
-use IPFS\Client\IPFSClient;
+1. Checking your IP address through Tor and non-Tor connections
 
-// Three different ways to instantiate the client
-$client = new IPFSClient(url: 'http://localhost:5001');
+    ```php
+    <?php
+    
+    use TorPHP\TorHttpClient;
+    use \Symfony\Component\HttpClient\HttpClient;
+    
+    $torHttpClient = new TorHttpClient(host: 'localhost', port: 9050, controlPort: 9051);
+    
+    $response = $torHttpClient->request('GET', 'https://api.ipify.org?format=json');
+    $torIp = $response->toArray()['ip'];
+    
+    $nonTorHttpClient = HttpClient::create();
+    $nonTorIp = $torHttpClient->request('GET', 'https://api.ipify.org?format=json')->toArray()['ip'];
+    
+    echo "Tor IP: $torIp\n";
+    echo "Non-Tor IP: $nonTorIp\n";
+    
+    /**
+     * Tor IP: 86.134.78.91
+     * Non-Tor IP: 164.21.35.156
+     */
+    ```
 
-// If nothing is passed, the default values are used (localhost and 5001)
-// $client = new IPFSClient();
-// $client = new IPFSClient(host: 'localhost', port: 5001);
+2. Requesting a new identity
+    ```php
+    <?php
+    
+    use TorPHP\TorHttpClient;
+    
+    $torHttpClient = new TorHttpClient(); // Default values set to the Tor default ports
+    
+    $response = $torHttpClient->request('GET', 'https://whatever.url/page/1');
+    $torHttpClient->newIdentity();
 
-// Add a file
-$file = $client->addFile('file.txt');
+    // Will use the new identity (new Tor circuit)
+    $response = $torHttpClient->request('GET', 'https://something.else/url');
+    ```
 
-echo 'File uploaded: ' . $file->hash;
-// File uploaded: QmWGeRAEgtsHW3ec7U4qW2CyVy7eA2mFRVbk1nb24jFyks
-// ...
+3. Managing your Tor node
 
-// Get the file content
-$fileContent = $client->cat($file->hash);
-// ...
+    ```php
+    <?php
 
-// Downloads the complete file
-$file = $client->get($file->hash);
-// ...
+    use TorPHP\TorControlClient;
+    use TorPHP\Model\PortMapping;
 
-// Download the file as a tar archive (compression can be specified with the compression parameters)
-$archive = $client->get($file->hash, archive: true);
-file_put_contents('archive.tar', $archive);
-// ...
-```
+    $torControlClient = new TorControlClient(); // Default values set to the Tor default ports
 
-More code examples can be found under the [examples](./examples) directory.
+    // List all available circuits
+    $circuits = $torControlClient->getCircuits();
 
+    $torControlClient->setConfigValue('SocksPort', '9080'); // Change a configuration value
+    $socksPort = $torControlClient->getConfigValue('SocksPort'); // Get a configuration value
+
+    // Add a new onion service
+    $onionService = $torControlClient->addOnionService([new PortMapping(host: 'localhost', localPort: 3000, remotePort: 80)]);
+
+    // List all onion services
+    $onionServices = $torControlClient->listOnionServices();
+
+    // Delete an onion service
+    $torControlClient->deleteOnionService($onionService->id);
+    ```
 &copy; Edouard Courty 2025
