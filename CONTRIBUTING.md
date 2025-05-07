@@ -1,4 +1,4 @@
-# Contributing to IPFS-PHP
+# Contributing to TOR-PHP
 
 Thank you for considering contributing to **tor-php**! <br />
 All contributions are appreciated, whether it's bug reports, feature requests, or code improvements. <br />
@@ -12,12 +12,13 @@ The following guidelines will help you get started and ensure a smooth contribut
       ```bash
       git clone git@github.com:your-username/tor-php
       ```
+
 2. **Create a Branch**
     - Create a new branch from `main` (or the default branch) to work on your changes:
       ```bash
       git checkout -b feature/my-new-feature
       ```
-    - Name your branch in a way that describes what you’re working on (e.g., `feature/add-transaction-support` or `bugfix/fix-transaction-deserialization`).
+    - Name your branch in a way that describes what you’re working on (e.g., `feature/add-support-for-this` or `bugfix/fix-socket-handling`).
 
 3. **Make Changes**
     - Implement your changes, whether it’s a bug fix, feature enhancement, or documentation update.
