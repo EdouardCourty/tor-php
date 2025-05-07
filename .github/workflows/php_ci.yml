@@ -34,5 +34,26 @@ jobs:
       - name: Run PHPStan
         run: php vendor/bin/phpstan --memory-limit=-1
 
+      - name: Install Tor
+        run: sudo apt-get update && sudo apt-get install -y tor
+
+      - name: Setup Tor with custom config file
+        run: |
+          sudo cp .github/data/torrc /etc/tor/torrc
+          sudo systemctl restart tor
+
+      - name: Wait for Tor to build a circuit
+        run: |
+          for i in {1..10}; do
+            if curl --socks5-hostname localhost:9050 --silent --fail http://check.torproject.org/; then
+              echo "Tor circuit is ready"
+              exit 0
+            fi
+            echo "Waiting for Tor to build a circuit..."
+            sleep 5
+          done
+          echo "Tor failed to build a circuit in time"
+          exit 1
+
       - name: Run PHPUnit
         run: php vendor/bin/phpunit tests
