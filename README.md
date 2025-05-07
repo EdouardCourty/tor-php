@@ -2,92 +2,156 @@
 
 [![PHP CI](https://github.com/EdouardCourty/tor-php/actions/workflows/php_ci.yml/badge.svg)](https://github.com/EdouardCourty/tor-php/actions/workflows/php_ci.yml)
 
-Tor-PHP provides a tor-proxied HTTP client for PHP, built on top of Symfony's HttpClient component. <br />
-It allows you to make HTTP requests through the Tor network, enabling anonymous browsing and web scraping. <br />
+**Tor-PHP** is a PHP library that provides two main things:
 
-It also allows you to interact with your Tor node using the Tor Control Protocol, enabling you to manage your Tor circuits and perform other operations.
+- `TorHttpClient`  
+  A Tor-proxied HTTP client built on top of Symfony's `HttpClient` component.  
+  _It allows you to send HTTP requests through the Tor network for anonymous browsing_
+- `TorControlClient`  
+  A socket client implementing the TorControl protocol to manage your node, circuits and hidden services.
 
-The changelog for this project can be found [here](./CHANGELOG.md).
+---
 
-## Installation
+## 🚀 Features
 
-1. Install Tor on your system : [official website page](https://community.torproject.org/onion-services/setup/install/) <br />
-    _TLDR_: <br />
-    - On Ubuntu/Debian: `sudo apt-get install tor` <br />
-    - On MacOS: `brew install tor` <br />
+- HTTP requests through Tor (SOCKS5 proxy)
+- Tor ControlPort integration for:
+   - Requesting a new identity
+   - Managing Tor circuits and configuration
+   - Creating and deleting Onion Services
 
-_If you want to use this library to its fullest, make sure the Tor ControlPort is enabled._
+---
 
-2. Install the library
-    ```shell
-    composer require ecourty/tor-php
-    ```
+## 📦 Installation
 
-## Usage example
+### 1. Install Tor
 
-1. Checking your IP address through Tor and non-Tor connections
+You must have the Tor service installed and running.
 
-    ```php
-    <?php
-    
-    use TorPHP\TorHttpClient;
-    use \Symfony\Component\HttpClient\HttpClient;
-    
-    $torHttpClient = new TorHttpClient(host: 'localhost', port: 9050, controlPort: 9051);
-    
-    $response = $torHttpClient->request('GET', 'https://api.ipify.org?format=json');
-    $torIp = $response->toArray()['ip'];
-    
-    $nonTorHttpClient = HttpClient::create();
-    $nonTorIp = $torHttpClient->request('GET', 'https://api.ipify.org?format=json')->toArray()['ip'];
-    
-    echo "Tor IP: $torIp\n";
-    echo "Non-Tor IP: $nonTorIp\n";
-    
-    /**
-     * Tor IP: 86.134.78.91
-     * Non-Tor IP: 164.21.35.156
-     */
-    ```
+#### On Debian/Ubuntu
 
-2. Requesting a new identity
-    ```php
-    <?php
-    
-    use TorPHP\TorHttpClient;
-    
-    $torHttpClient = new TorHttpClient(); // Default values set to the Tor default ports
-    
-    $response = $torHttpClient->request('GET', 'https://whatever.url/page/1');
-    $torHttpClient->newIdentity();
+```bash
+sudo apt install tor
+```
 
-    // Will use the new identity (new Tor circuit)
-    $response = $torHttpClient->request('GET', 'https://something.else/url');
-    ```
+#### On macOS (Homebrew)
 
-3. Managing your Tor node
+```bash
+brew install tor
+```
 
-    ```php
-    <?php
+> Make sure the `ControlPort` is enabled in your Tor configuration (`/etc/tor/torrc` or equivalent):
+>
+> ```ini
+> ControlPort 9051
+> HashedControlPassword <your_password_hash>
+> CookieAuthentication 0
+> ```
 
-    use TorPHP\TorControlClient;
-    use TorPHP\Model\PortMapping;
+### 2. Install Tor-PHP via Composer
 
-    $torControlClient = new TorControlClient(); // Default values set to the Tor default ports
+```bash
+composer require ecourty/tor-php
+```
 
-    // List all available circuits
-    $circuits = $torControlClient->getCircuits();
+---
 
-    $torControlClient->setConfigValue('SocksPort', '9080'); // Change a configuration value
-    $socksPort = $torControlClient->getConfigValue('SocksPort'); // Get a configuration value
+## 🛠 Requirements
 
-    // Add a new onion service
-    $onionService = $torControlClient->addOnionService([new PortMapping(host: 'localhost', localPort: 3000, remotePort: 80)]);
+- PHP 8.4 or higher
+- Tor must be running locally with ControlPort enabled for full features integration
 
-    // List all onion services
-    $onionServices = $torControlClient->listOnionServices();
+---
 
-    // Delete an onion service
-    $torControlClient->deleteOnionService($onionService->id);
-    ```
-&copy; Edouard Courty 2025
+## 📘 Usage Examples
+
+### Example 1: Get current IP via Tor
+
+```php
+<?php
+
+use TorPHP\TorHttpClient;
+use Symfony\Component\HttpClient\HttpClient;
+
+$torClient = new TorHttpClient();
+
+$response = $torClient->request('GET', 'https://api.ipify.org?format=json');
+$torIp = $response->toArray()['ip'];
+
+$normalClient = HttpClient::create();
+$normalIp = $normalClient->request('GET', 'https://api.ipify.org?format=json')->toArray()['ip'];
+
+echo "Tor IP: $torIp" . PHP_EOL;
+echo "Non-Tor IP: $normalIp" . PHP_EOL;
+```
+
+---
+
+### Example 2: Request a New Identity
+
+```php
+<?php
+
+use TorPHP\TorHttpClient;
+
+$torClient = new TorHttpClient();
+$torClient->request('GET', 'https://example.com');
+
+// Change circuit when you need
+$torClient->newIdentity();
+
+$response = $torClient->request('GET', 'https://example.com/another-page');
+```
+
+---
+
+### Example 3: Manage Your Tor Node
+
+```php
+<?php
+
+use TorPHP\TorControlClient;
+use TorPHP\Model\PortMapping;
+
+$control = new TorControlClient();
+
+// Get circuits
+$circuits = $control->getCircuits();
+
+// Change config
+$control->setConfigValue('SocksPort', '9080');
+
+// Add onion service
+$onion = $control->addOnionService([
+    new PortMapping(host: 'localhost', localPort: 3000, remotePort: 80),
+]);
+
+// List onion services
+$services = $control->listOnionServices();
+
+// Delete onion service
+$control->deleteOnionService($onion->id);
+```
+
+Other code examples can be [found here](./examples).
+
+---
+
+## 📚 Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for details.
+
+---
+
+## 👤 Author
+
+[**Edouard Courty**](https://github.com/EdouardCourty)  
+MIT Licensed [(see)](./LICENSE)  
+&copy; 2025
+
+---
+
+## 🙋‍♂️ Need Help?
+
+Feel free to open an issue or contribute via pull requests! <br />
+[See contributing guidelines](./CONTRIBUTING.md)
